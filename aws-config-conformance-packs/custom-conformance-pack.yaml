@@ -2,11 +2,40 @@ Parameters:
   CustomConfigRuleLambdaArn:
     Description: The ARN of the custom config rule lambda.
     Type: String
+  Environment:
+    Description: Environment name (e.g., dev, staging, prod)
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  NotificationEmail:
+    Description: Email address for compliance notifications
+    Type: String
+    Default: ""
 Resources:
+  # SNS Topic for compliance notifications
+  ComplianceNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${Environment}-config-compliance-notifications"
+      DisplayName: !Sub "AWS Config Compliance Notifications - ${Environment}"
+  
+  # SNS Subscription for email notifications
+  ComplianceNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Protocol: email
+      TopicArn: !Ref ComplianceNotificationTopic
+      Endpoint: !Ref NotificationEmail
+
   CustomRuleForEC2:
     Type: AWS::Config::ConfigRule
     Properties:
-      ConfigRuleName: "CustomRuleForEC2"
+      ConfigRuleName: !Sub "${Environment}-CustomRuleForEC2"
+      Description: !Sub "Custom rule for EC2 instances in ${Environment} environment"
       Scope:
         ComplianceResourceTypes:
           - "AWS::EC2::Volume"
@@ -23,11 +52,15 @@ Resources:
           Ref: CustomConfigRuleLambdaArn
   ConfigRuleForVolumeTags:
     Type: AWS::Config::ConfigRule
-    Description: "Test CREATE"
+    Description: !Sub "Volume tags compliance rule for ${Environment}"
     Properties:
-      ConfigRuleName: "ConfigRuleForVolumeTags"
-      InputParameters:
-        tag1Key: CostCenter
+      ConfigRuleName: !Sub "${Environment}-ConfigRuleForVolumeTags"
+      InputParameters: !Sub |
+        {
+          "tag1Key": "CostCenter",
+          "tag2Key": "Environment",
+          "tag2Value": "${Environment}"
+        }
       Scope:
         ComplianceResourceTypes:
           - "AWS::EC2::Volume"
@@ -36,11 +69,46 @@ Resources:
         SourceIdentifier: "REQUIRED_TAGS"
   CloudTrailEnabled:
     Type: AWS::Config::ConfigRule
-    Description: "CloudTrail rule"
+    Description: !Sub "CloudTrail compliance rule for ${Environment}"
     Properties:
-      ConfigRuleName: "CloudTrailEnabled"
-      InputParameters:
-        s3BucketName: testBucketName
+      ConfigRuleName: !Sub "${Environment}-CloudTrailEnabled"
+      InputParameters: !Sub |
+        {
+          "s3BucketName": "${Environment}-cloudtrail-logs"
+        }
       Source:
         Owner: AWS
         SourceIdentifier: "CLOUD_TRAIL_ENABLED"
+
+# Add conditions section
+Conditions:
+  HasNotificationEmail: !Not 
+    - !Equals 
+      - !Ref NotificationEmail
+      - ""
+
+# Add outputs section
+Outputs:
+  CustomConfigRuleArn:
+    Description: ARN of the custom EC2 config rule
+    Value: !GetAtt CustomRuleForEC2.Arn
+    Export:
+      Name: !Sub "${Environment}-CustomConfigRuleArn"
+  
+  VolumeTagsRuleArn:
+    Description: ARN of the volume tags config rule
+    Value: !GetAtt ConfigRuleForVolumeTags.Arn
+    Export:
+      Name: !Sub "${Environment}-VolumeTagsRuleArn"
+  
+  CloudTrailRuleArn:
+    Description: ARN of the CloudTrail config rule
+    Value: !GetAtt CloudTrailEnabled.Arn
+    Export:
+      Name: !Sub "${Environment}-CloudTrailRuleArn"
+  
+  NotificationTopicArn:
+    Description: ARN of the SNS topic for compliance notifications
+    Value: !Ref ComplianceNotificationTopic
+    Export:
+      Name: !Sub "${Environment}-ComplianceNotificationTopicArn"
