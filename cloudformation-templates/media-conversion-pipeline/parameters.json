@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "dev"
+  },
+  {
+    "ParameterKey": "InputBucketName",
+    "ParameterValue": "my-media-input-bucket"
+  },
+  {
+    "ParameterKey": "OutputBucketPrefix",
+    "ParameterValue": "media-output"
+  }
+]
